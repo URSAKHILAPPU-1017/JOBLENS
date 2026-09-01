@@ -4,6 +4,8 @@ import { ServerOff, RefreshCw, ArrowLeft, Terminal } from "lucide-react";
 import { useLocation } from "wouter";
 import { checkServerHealth } from "@/lib/api";
 
+import { toast } from "sonner";
+
 interface ServerErrorPageProps {
   onRetry?: () => void;
   title?: string;
@@ -23,8 +25,11 @@ export function ServerErrorPage({
     const ok = await checkServerHealth(3000);
     setIsRetrying(false);
     if (ok) {
+      toast.success("Connected to JOBLENS server!");
       if (onRetry) onRetry();
       else window.location.reload();
+    } else {
+      toast.error("JOBLENS server is still unreachable. Please verify pnpm dev is running.");
     }
   };
 

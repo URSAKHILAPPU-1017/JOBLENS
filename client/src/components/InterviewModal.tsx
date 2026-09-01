@@ -4,6 +4,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { toast } from "sonner";
 import { Sparkles, Save, CheckCircle2 } from "lucide-react";
 
+import { getStoredAnswers, saveStoredAnswer } from "@/lib/storage";
+
 interface QuestionItem {
   id: string;
   question: string;
@@ -27,19 +29,28 @@ export function InterviewModal({ open, onOpenChange, analysisId, questionItem }:
   useEffect(() => {
     if (questionItem && analysisId) {
       setSavedSuccess(false);
+      // 1. Check local storage first (immediate, reliable)
+      const localAnswers = getStoredAnswers(analysisId);
+      const localFound = localAnswers.find((a) => a.questionId === questionItem.id);
+      if (localFound) {
+        setAnswerText(localFound.answer);
+      } else {
+        setAnswerText("");
+      }
+
+      // 2. Async fetch from API to sync if available
       fetch(`/api/answers/${analysisId}`)
         .then((res) => (res.ok ? res.json() : null))
         .then((data) => {
           if (data && data.success && Array.isArray(data.answers)) {
             const found = data.answers.find((a: any) => a.questionId === questionItem.id);
-            if (found) {
+            if (found && found.answer) {
               setAnswerText(found.answer);
-            } else {
-              setAnswerText("");
+              saveStoredAnswer(analysisId, questionItem.id, found.answer);
             }
           }
         })
-        .catch(() => setAnswerText(""));
+        .catch(() => {});
     }
   }, [questionItem, analysisId, open]);
 
@@ -52,25 +63,20 @@ export function InterviewModal({ open, onOpenChange, analysisId, questionItem }:
     }
     setIsSaving(true);
     try {
-      const resp = await fetch("/api/answers", {
+      const cleanAnswer = answerText.trim();
+      // 1. Persist directly in localStorage
+      saveStoredAnswer(analysisId, questionItem.id, cleanAnswer);
+
+      // 2. Fire API request asynchronously
+      fetch("/api/answers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           analysisId,
           questionId: questionItem.id,
-          answer: answerText.trim(),
+          answer: cleanAnswer,
         }),
-      });
-
-      const contentType = resp.headers.get("content-type") || "";
-      let data: any = null;
-      if (contentType.includes("application/json")) {
-        data = await resp.json();
-      }
-
-      if (!resp.ok || !data || !data.success) {
-        throw new Error(data?.error || "Failed to save answer.");
-      }
+      }).catch(() => {});
 
       setSavedSuccess(true);
       toast.success("Interview answer saved successfully!");

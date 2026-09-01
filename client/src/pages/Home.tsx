@@ -33,6 +33,7 @@ import { exportCSV, exportExcel, exportPDFPrint } from "@/lib/exportUtils";
 import { apiFetch, ApiError } from "@/lib/api";
 import { OfflinePage } from "@/components/OfflinePage";
 import { ServerErrorPage } from "@/components/ServerErrorPage";
+import { getStoredCustomRoles, deleteStoredCustomRole } from "@/lib/storage";
 
 type Stage = { label: string; detail: string };
 const stages: Stage[] = [
@@ -122,15 +123,33 @@ export default function Home() {
 
   const inputRef = useRef<HTMLInputElement>(null);
 
+  // Helper to merge default/server roles with custom roles from localStorage
+  const combineWithLocalCustomRoles = (baseRoles: JobRole[]): JobRole[] => {
+    const customRoles = getStoredCustomRoles();
+    if (customRoles.length === 0) return baseRoles;
+    const combined = [...customRoles];
+    baseRoles.forEach((b) => {
+      if (!combined.some((c) => c.id === b.id)) {
+        combined.push(b);
+      }
+    });
+    return combined;
+  };
+
   // Load roles on mount
   const loadRoles = async () => {
+    const localCustom = getStoredCustomRoles();
     try {
       const data = await apiFetch("/api/roles", { timeoutMs: 5000 });
       if (data.roles && Array.isArray(data.roles) && data.roles.length > 0) {
-        setRoles(data.roles);
-        if (!data.roles.some((r: JobRole) => r.id === selectedRoleId)) {
-          setSelectedRoleId(data.roles[0].id);
+        const merged = combineWithLocalCustomRoles(data.roles);
+        setRoles(merged);
+        if (!merged.some((r: JobRole) => r.id === selectedRoleId)) {
+          setSelectedRoleId(merged[0].id);
         }
+      } else {
+        const merged = combineWithLocalCustomRoles(DEFAULT_JOB_ROLES);
+        setRoles(merged);
       }
       setPageError(null);
     } catch (err: any) {
@@ -141,7 +160,8 @@ export default function Home() {
           setPageError("OFFLINE");
         }
       }
-      setRoles(DEFAULT_JOB_ROLES);
+      const merged = combineWithLocalCustomRoles(DEFAULT_JOB_ROLES);
+      setRoles(merged);
     }
   };
 
@@ -162,6 +182,12 @@ export default function Home() {
   }, [roles, query]);
 
   const handleFileUpload = async (uploadedFile: File) => {
+    // Client-side 4 MB file size validation
+    if (uploadedFile.size > 4 * 1024 * 1024) {
+      toast.error("The uploaded file exceeds the 4 MB size limit. Please upload a resume under 4 MB.");
+      return;
+    }
+
     setFile(uploadedFile);
     setParsedResume(null);
     setAnalysisResult(null); // Clear previous analysis session!
@@ -244,17 +270,20 @@ export default function Home() {
       return;
     }
 
+    // 1. Delete from client localStorage immediately
+    deleteStoredCustomRole(roleId);
+    setRoles((prev) => prev.filter((r) => r.id !== roleId));
+    if (selectedRoleId === roleId) {
+      const remaining = roles.filter((r) => r.id !== roleId);
+      if (remaining.length > 0) setSelectedRoleId(remaining[0].id);
+    }
+    toast.success("Role deleted.");
+
+    // 2. Async API deletion attempt
     try {
       await apiFetch(`/api/roles/${roleId}`, { method: "DELETE" });
-
-      toast.success("Role deleted.");
-      setRoles((prev) => prev.filter((r) => r.id !== roleId));
-      if (selectedRoleId === roleId) {
-        const remaining = roles.filter((r) => r.id !== roleId);
-        if (remaining.length > 0) setSelectedRoleId(remaining[0].id);
-      }
-    } catch (err: any) {
-      toast.error(err.userMessage || err.message || "Failed to delete role.");
+    } catch (err) {
+      // Handled locally via localStorage
     }
   };
 
@@ -660,7 +689,7 @@ export default function Home() {
                         </div>
                         <div className="mt-4 text-sm font-bold">Drop your resume here</div>
                         <div className="mt-1 text-xs text-[#657180]">
-                          PDF, DOCX, or TXT · up to 10 MB
+                          PDF, DOCX, or TXT · up to 4 MB
                         </div>
                         <span className="mt-4 text-xs font-bold text-[#e7684a]">Browse files</span>
                       </>

@@ -5,6 +5,9 @@ import { JobRole } from "@shared/types";
 import { toast } from "sonner";
 import { Briefcase, Building, MapPin, Tag, Wrench } from "lucide-react";
 
+import { saveStoredCustomRole } from "@/lib/storage";
+import { nanoid } from "nanoid";
+
 interface RoleModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -73,7 +76,9 @@ export function RoleModal({ open, onOpenChange, roleToEdit, onSaveRole }: RoleMo
 
     setIsSubmitting(true);
     try {
-      const payload = {
+      const roleId = roleToEdit ? roleToEdit.id : `role-${nanoid(8)}`;
+      const roleObj: JobRole = {
+        id: roleId,
         title: title.trim(),
         company: company.trim() || "Custom Organization",
         category: category.trim() || "General",
@@ -82,24 +87,25 @@ export function RoleModal({ open, onOpenChange, roleToEdit, onSaveRole }: RoleMo
         preferredSkills: prefSkillsList,
         experienceLevel: experienceLevel.trim(),
         location: location.trim(),
+        createdAt: roleToEdit?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        isDefault: false,
       };
 
+      // 1. Save to client localStorage immediately (guarantees persistence across page refresh & offline/Vercel)
+      saveStoredCustomRole(roleObj);
+
+      // 2. Fire API request asynchronously to attempt server save
       const url = roleToEdit ? `/api/roles/${roleToEdit.id}` : "/api/roles";
       const method = roleToEdit ? "PUT" : "POST";
-
-      const resp = await fetch(url, {
+      fetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-
-      const data = await resp.json();
-      if (!resp.ok || !data.success) {
-        throw new Error(data.error || "Failed to save role.");
-      }
+        body: JSON.stringify(roleObj),
+      }).catch(() => {});
 
       toast.success(roleToEdit ? "Role updated successfully!" : "New role created successfully!");
-      onSaveRole(data.role);
+      onSaveRole(roleObj);
       onOpenChange(false);
     } catch (err: any) {
       toast.error(err.message || "Could not save role.");
