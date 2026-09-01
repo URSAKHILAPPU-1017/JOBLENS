@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction, ErrorRequestHandler } from "express";
+import express, { ErrorRequestHandler } from "express";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -107,20 +107,22 @@ export function createApp() {
     limits: { fileSize: 4 * 1024 * 1024 }, // 4 MB limit
   });
 
-  const apiRouter = express.Router();
-
-  // Health Check Endpoint (GET /health or GET /api/health)
-  const healthHandler = (_req: Request, res: Response) => {
+  // Independent Direct Health Endpoint (guarantees HTTP 200 JSON with zero dependencies)
+  const healthHandler = (_req: express.Request, res: express.Response) => {
     return res.status(200).json({
       status: "ok",
       service: "JOBLENS API",
-      timestamp: new Date().toISOString(),
     });
   };
+
+  app.get("/api/health", healthHandler);
+  app.get("/health", healthHandler);
+
+  const apiRouter = express.Router();
   apiRouter.get("/health", healthHandler);
 
   // Resume Upload Endpoint (POST /resume/upload or POST /api/resume/upload)
-  apiRouter.post("/resume/upload", (req: Request, res: Response) => {
+  apiRouter.post("/resume/upload", (req: express.Request, res: express.Response) => {
     upload.single("resume")(req, res, async (err: any) => {
       if (err) {
         console.error("[Upload Middleware Error]", err);
@@ -177,7 +179,7 @@ export function createApp() {
   });
 
   // Resume Analysis Endpoint (POST /analyze or POST /api/analyze)
-  apiRouter.post("/analyze", (req: Request, res: Response) => {
+  apiRouter.post("/analyze", (req: express.Request, res: express.Response) => {
     try {
       const { parsedResume, role } = req.body as { parsedResume: ParsedResume; role: JobRole };
       if (!parsedResume || !parsedResume.extractedText) {
@@ -208,12 +210,12 @@ export function createApp() {
   });
 
   // Roles CRUD Endpoints
-  apiRouter.get("/roles", (_req: Request, res: Response) => {
+  apiRouter.get("/roles", (_req: express.Request, res: express.Response) => {
     const roles = loadRoles();
     return res.status(200).json({ success: true, roles });
   });
 
-  apiRouter.post("/roles", (req: Request, res: Response) => {
+  apiRouter.post("/roles", (req: express.Request, res: express.Response) => {
     try {
       const { title, company, category, description, requiredSkills, preferredSkills, experienceLevel, location } = req.body;
       if (!title || typeof title !== "string" || !title.trim()) {
@@ -269,7 +271,7 @@ export function createApp() {
     }
   });
 
-  apiRouter.put("/roles/:id", (req: Request, res: Response) => {
+  apiRouter.put("/roles/:id", (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
       const { title, company, category, description, requiredSkills, preferredSkills, experienceLevel, location } = req.body;
@@ -329,7 +331,7 @@ export function createApp() {
     }
   });
 
-  apiRouter.delete("/roles/:id", (req: Request, res: Response) => {
+  apiRouter.delete("/roles/:id", (req: express.Request, res: express.Response) => {
     try {
       const { id } = req.params;
       const roles = loadRoles();
@@ -358,14 +360,14 @@ export function createApp() {
   });
 
   // Saved Interview Answers
-  apiRouter.get("/answers/:analysisId", (req: Request, res: Response) => {
+  apiRouter.get("/answers/:analysisId", (req: express.Request, res: express.Response) => {
     const { analysisId } = req.params;
     const all = loadAnswers();
     const filtered = all.filter((a) => a.analysisId === analysisId);
     return res.status(200).json({ success: true, answers: filtered });
   });
 
-  apiRouter.post("/answers", (req: Request, res: Response) => {
+  apiRouter.post("/answers", (req: express.Request, res: express.Response) => {
     try {
       const { analysisId, questionId, answer } = req.body;
       if (!analysisId || !questionId) {
@@ -412,7 +414,7 @@ export function createApp() {
     const staticPath = path.resolve(__dirname, "..");
     if (fs.existsSync(staticPath) && fs.existsSync(path.join(staticPath, "index.html"))) {
       app.use(express.static(staticPath));
-      app.get("*", (req: Request, res: Response, next: NextFunction) => {
+      app.get("*", (req: express.Request, res: express.Response, next: express.NextFunction) => {
         if (req.path && req.path.startsWith("/api")) return next();
         res.sendFile(path.join(staticPath, "index.html"));
       });
@@ -420,7 +422,7 @@ export function createApp() {
   }
 
   // Centralized Express Error Handler (guarantees JSON response for all /api errors)
-  const errorHandler: ErrorRequestHandler = (err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const errorHandler: ErrorRequestHandler = (err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
     console.error("[Central Error Handler]", err);
     const status = err.status || err.statusCode || (err instanceof multer.MulterError ? 400 : 500);
     res.status(status).json({
