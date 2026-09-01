@@ -104,21 +104,21 @@ export function createApp() {
     limits: { fileSize: 4 * 1024 * 1024 }, // 4 MB limit
   });
 
-  // =========================================================================
-  // API ENDPOINTS
-  // =========================================================================
+  const apiRouter = express.Router();
 
-  // Health Check Endpoint
-  app.get("/api/health", (_req: Request, res: Response) => {
+  // Health Check Endpoint (GET /health or GET /api/health)
+  const healthHandler = (_req: Request, res: Response) => {
     return res.status(200).json({
       status: "ok",
-      service: "JOBLENS",
+      service: "JOBLENS API",
       timestamp: new Date().toISOString(),
     });
-  });
+  };
+  apiRouter.get("/health", healthHandler);
+  apiRouter.get("/", healthHandler);
 
-  // Resume Upload Endpoint
-  app.post("/api/resume/upload", (req: Request, res: Response, next: NextFunction) => {
+  // Resume Upload Endpoint (POST /resume/upload or POST /api/resume/upload)
+  apiRouter.post("/resume/upload", (req: Request, res: Response, next: NextFunction) => {
     upload.single("resume")(req, res, async (err: any) => {
       if (err) {
         console.error("[Upload Middleware Error]", err);
@@ -142,7 +142,7 @@ export function createApp() {
           });
         }
 
-        // Validate 4 MB file size strictly on server side
+        // Validate 4 MB file size limit strictly on server side
         if (req.file.size > 4 * 1024 * 1024) {
           return res.status(413).json({
             success: false,
@@ -172,8 +172,8 @@ export function createApp() {
     });
   });
 
-  // Resume Analysis Endpoint
-  app.post("/api/analyze", (req: Request, res: Response) => {
+  // Resume Analysis Endpoint (POST /analyze or POST /api/analyze)
+  apiRouter.post("/analyze", (req: Request, res: Response) => {
     try {
       const { parsedResume, role } = req.body as { parsedResume: ParsedResume; role: JobRole };
       if (!parsedResume || !parsedResume.extractedText) {
@@ -204,12 +204,12 @@ export function createApp() {
   });
 
   // Roles CRUD Endpoints
-  app.get("/api/roles", (_req: Request, res: Response) => {
+  apiRouter.get("/roles", (_req: Request, res: Response) => {
     const roles = loadRoles();
     return res.status(200).json({ success: true, roles });
   });
 
-  app.post("/api/roles", (req: Request, res: Response) => {
+  apiRouter.post("/roles", (req: Request, res: Response) => {
     try {
       const { title, company, category, description, requiredSkills, preferredSkills, experienceLevel, location } = req.body;
       if (!title || typeof title !== "string" || !title.trim()) {
@@ -265,7 +265,7 @@ export function createApp() {
     }
   });
 
-  app.put("/api/roles/:id", (req: Request, res: Response) => {
+  apiRouter.put("/roles/:id", (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { title, company, category, description, requiredSkills, preferredSkills, experienceLevel, location } = req.body;
@@ -325,7 +325,7 @@ export function createApp() {
     }
   });
 
-  app.delete("/api/roles/:id", (req: Request, res: Response) => {
+  apiRouter.delete("/roles/:id", (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const roles = loadRoles();
@@ -354,14 +354,14 @@ export function createApp() {
   });
 
   // Saved Interview Answers
-  app.get("/api/answers/:analysisId", (req: Request, res: Response) => {
+  apiRouter.get("/answers/:analysisId", (req: Request, res: Response) => {
     const { analysisId } = req.params;
     const all = loadAnswers();
     const filtered = all.filter((a) => a.analysisId === analysisId);
     return res.status(200).json({ success: true, answers: filtered });
   });
 
-  app.post("/api/answers", (req: Request, res: Response) => {
+  apiRouter.post("/answers", (req: Request, res: Response) => {
     try {
       const { analysisId, questionId, answer } = req.body;
       if (!analysisId || !questionId) {
@@ -398,6 +398,10 @@ export function createApp() {
       });
     }
   });
+
+  // Mount API router on both /api and / to handle all Vercel serverless routing scenarios seamlessly
+  app.use("/api", apiRouter);
+  app.use("/", apiRouter);
 
   // Production Static Routing for Standalone Express Server
   if (process.env.NODE_ENV === "production") {

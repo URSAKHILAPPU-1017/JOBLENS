@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Sparkles, Save, CheckCircle2 } from "lucide-react";
 
 import { getStoredAnswers, saveStoredAnswer } from "@/lib/storage";
+import { api } from "@/lib/api";
 
 interface QuestionItem {
   id: string;
@@ -38,9 +39,8 @@ export function InterviewModal({ open, onOpenChange, analysisId, questionItem }:
         setAnswerText("");
       }
 
-      // 2. Async fetch from API to sync if available
-      fetch(`/api/answers/${analysisId}`)
-        .then((res) => (res.ok ? res.json() : null))
+      // 2. Async fetch from central API client to sync if available
+      api.getAnswers(analysisId)
         .then((data) => {
           if (data && data.success && Array.isArray(data.answers)) {
             const found = data.answers.find((a: any) => a.questionId === questionItem.id);
@@ -67,16 +67,8 @@ export function InterviewModal({ open, onOpenChange, analysisId, questionItem }:
       // 1. Persist directly in localStorage
       saveStoredAnswer(analysisId, questionItem.id, cleanAnswer);
 
-      // 2. Fire API request asynchronously
-      fetch("/api/answers", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          analysisId,
-          questionId: questionItem.id,
-          answer: cleanAnswer,
-        }),
-      }).catch(() => {});
+      // 2. Fire API request asynchronously through central API client
+      api.saveAnswer(analysisId, questionItem.id, cleanAnswer).catch(() => {});
 
       setSavedSuccess(true);
       toast.success("Interview answer saved successfully!");

@@ -1,10 +1,14 @@
+import { JobRole, ParsedResume, AnalysisResult, SavedAnswer } from "@shared/types";
+
 export type ApiErrorCode =
   | "OFFLINE"
   | "SERVER_UNAVAILABLE"
   | "NOT_FOUND"
   | "TIMEOUT"
-  | "API_ERROR"
+  | "FILE_TOO_LARGE"
   | "PARSE_ERROR"
+  | "ANALYSIS_FAILED"
+  | "API_ERROR"
   | "UNKNOWN";
 
 export class ApiError extends Error {
@@ -25,12 +29,26 @@ export interface ApiFetchOptions extends RequestInit {
   timeoutMs?: number;
 }
 
+/** Check if running on local development host (localhost or 127.0.0.1) */
+export function isLocalDev(): boolean {
+  if (typeof window === "undefined") return false;
+  const host = window.location.hostname;
+  return (host === "localhost" || host === "127.0.0.1") && !import.meta.env.PROD;
+}
+
+/** Retrieve relative API Base URL ("" for same-domain / relative routing) */
+export function getApiBaseUrl(): string {
+  return import.meta.env.VITE_API_BASE_URL || "";
+}
+
+/** Perform health check call to /api/health */
 export async function checkServerHealth(timeoutMs = 3000): Promise<boolean> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const res = await fetch("/api/health", {
+    const url = `${getApiBaseUrl()}/api/health`;
+    const res = await fetch(url, {
       method: "GET",
       signal: controller.signal,
     });
@@ -44,8 +62,9 @@ export async function checkServerHealth(timeoutMs = 3000): Promise<boolean> {
   }
 }
 
+/** Central apiFetch helper enforcing relative /api routing and environment-aware error handling */
 export async function apiFetch<T = any>(
-  url: string,
+  path: string,
   options: ApiFetchOptions = {}
 ): Promise<T> {
   const { timeoutMs = 15000, ...fetchOptions } = options;
@@ -59,7 +78,11 @@ export async function apiFetch<T = any>(
     );
   }
 
-  // 2. Setup timeout controller
+  // 2. Resolve final request URL (always relative /api/... by default)
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const url = `${getApiBaseUrl()}${normalizedPath}`;
+
+  // 3. Setup timeout controller
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -92,10 +115,17 @@ export async function apiFetch<T = any>(
 
     if (!response.ok || (data && data.success === false)) {
       const status = response.status;
-      let errorCode: ApiErrorCode = "API_ERROR";
+      let errorCode: ApiErrorCode = data?.code || "API_ERROR";
 
-      if (status === 404) errorCode = "NOT_FOUND";
-      else if (status >= 500) errorCode = "SERVER_UNAVAILABLE";
+      if (status === 413 || errorCode === "FILE_TOO_LARGE") {
+        errorCode = "FILE_TOO_LARGE";
+      } else if (status === 404) {
+        errorCode = "NOT_FOUND";
+      } else if (status === 422 || errorCode === "PARSE_ERROR") {
+        errorCode = "PARSE_ERROR";
+      } else if (status >= 500) {
+        errorCode = "SERVER_UNAVAILABLE";
+      }
 
       const message =
         data?.error ||
@@ -139,11 +169,10 @@ export async function apiFetch<T = any>(
           0
         );
       }
-      throw new ApiError(
-        "We couldn't connect to the local JOBLENS server. Please verify the server is running.",
-        "SERVER_UNAVAILABLE",
-        503
-      );
+      const unavailableMsg = isLocalDev()
+        ? "We couldn't connect to the local JOBLENS server. Please verify the server is running (pnpm dev)."
+        : "JOBLENS service is temporarily unavailable. Please check your network connection or try again in a moment.";
+      throw new ApiError(unavailableMsg, "SERVER_UNAVAILABLE", 503);
     }
 
     throw new ApiError(
@@ -153,3 +182,100 @@ export async function apiFetch<T = any>(
     );
   }
 }
+
+/**
+ * Central API Client Interface
+ * All frontend API calls MUST go through this object.
+ */
+export const api = {
+  /** Health check endpoint GET /api/health */
+  getHealth: async (timeoutMs = 3000) => {
+    return apiFetch<{ status: string; service: string; timestamp?: string }>("/api/health", {
+      method: "GET",
+      timeoutMs,
+    });
+  },
+
+  /** Get default & custom job roles GET /api/roles */
+  getRoles: async (timeoutMs = 5000) => {
+    return apiFetch<{ success: boolean; roles: JobRole[] }>("/api/roles", {
+      method: "GET",
+      timeoutMs,
+    });
+  },
+
+  /** Create custom job role POST /api/roles */
+  createRole: async (roleData: Partial<JobRole>, timeoutMs = 8000) => {
+    return apiFetch<{ success: boolean; role: JobRole }>("/api/roles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(roleData),
+      timeoutMs,
+    });
+  },
+
+  /** Update job role PUT /api/roles/:id */
+  updateRole: async (id: string, roleData: Partial<JobRole>, timeoutMs = 8000) => {
+    return apiFetch<{ success: boolean; role: JobRole }>(`/api/roles/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(roleData),
+      timeoutMs,
+    });
+  },
+
+  /** Delete job role DELETE /api/roles/:id */
+  deleteRole: async (id: string, timeoutMs = 8000) => {
+    return apiFetch<{ success: boolean; deletedId: string }>(`/api/roles/${id}`, {
+      method: "DELETE",
+      timeoutMs,
+    });
+  },
+
+  /** Upload resume file POST /api/resume/upload (4 MB max limit) */
+  uploadResume: async (file: File, timeoutMs = 30000) => {
+    if (file.size > 4 * 1024 * 1024) {
+      throw new ApiError(
+        "The uploaded file exceeds the 4 MB size limit. Please upload a resume under 4 MB.",
+        "FILE_TOO_LARGE",
+        413
+      );
+    }
+    const formData = new FormData();
+    formData.append("resume", file);
+
+    return apiFetch<{ success: boolean; resume: ParsedResume }>("/api/resume/upload", {
+      method: "POST",
+      body: formData,
+      timeoutMs,
+    });
+  },
+
+  /** Analyze uploaded resume text against target role POST /api/analyze */
+  analyzeResume: async (parsedResume: ParsedResume, role: JobRole, timeoutMs = 20000) => {
+    return apiFetch<{ success: boolean; result: AnalysisResult }>("/api/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ parsedResume, role }),
+      timeoutMs,
+    });
+  },
+
+  /** Fetch saved interview answers GET /api/answers/:analysisId */
+  getAnswers: async (analysisId: string, timeoutMs = 5000) => {
+    return apiFetch<{ success: boolean; answers: SavedAnswer[] }>(`/api/answers/${analysisId}`, {
+      method: "GET",
+      timeoutMs,
+    });
+  },
+
+  /** Save interview answer POST /api/answers */
+  saveAnswer: async (analysisId: string, questionId: string, answer: string, timeoutMs = 5000) => {
+    return apiFetch<{ success: boolean; answer: SavedAnswer }>("/api/answers", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ analysisId, questionId, answer }),
+      timeoutMs,
+    });
+  },
+};

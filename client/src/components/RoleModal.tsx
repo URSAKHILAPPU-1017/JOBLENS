@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Briefcase, Building, MapPin, Tag, Wrench } from "lucide-react";
 
 import { saveStoredCustomRole } from "@/lib/storage";
+import { api } from "@/lib/api";
 import { nanoid } from "nanoid";
 
 interface RoleModalProps {
@@ -32,8 +33,8 @@ export function RoleModal({ open, onOpenChange, roleToEdit, onSaveRole }: RoleMo
       setCompany(roleToEdit.company || "");
       setCategory(roleToEdit.category || "Technology");
       setDescription(roleToEdit.description || "");
-      setRequiredSkills((roleToEdit.requiredSkills || []).join(", "));
-      setPreferredSkills((roleToEdit.preferredSkills || []).join(", "));
+      setRequiredSkills(Array.isArray(roleToEdit.requiredSkills) ? roleToEdit.requiredSkills.join(", ") : "");
+      setPreferredSkills(Array.isArray(roleToEdit.preferredSkills) ? roleToEdit.preferredSkills.join(", ") : "");
       setExperienceLevel(roleToEdit.experienceLevel || "Mid Level (2-4 years)");
       setLocation(roleToEdit.location || "Remote / Hybrid");
     } else {
@@ -51,40 +52,34 @@ export function RoleModal({ open, onOpenChange, roleToEdit, onSaveRole }: RoleMo
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      toast.error("Job title is required.");
+      toast.error("Please enter a job title.");
       return;
     }
     if (!description.trim()) {
-      toast.error("Job description is required.");
-      return;
-    }
-
-    const reqSkillsList = requiredSkills
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    const prefSkillsList = preferredSkills
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    if (reqSkillsList.length === 0) {
-      toast.error("Please enter at least one required skill.");
+      toast.error("Please enter a job description.");
       return;
     }
 
     setIsSubmitting(true);
     try {
-      const roleId = roleToEdit ? roleToEdit.id : `role-${nanoid(8)}`;
+      const reqSkills = requiredSkills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      const prefSkills = preferredSkills
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+
       const roleObj: JobRole = {
-        id: roleId,
+        id: roleToEdit ? roleToEdit.id : `role-${nanoid(8)}`,
         title: title.trim(),
         company: company.trim() || "Custom Organization",
-        category: category.trim() || "General",
+        category: category.trim() || "Technology",
         description: description.trim(),
-        requiredSkills: reqSkillsList,
-        preferredSkills: prefSkillsList,
+        requiredSkills: reqSkills.length > 0 ? reqSkills : ["General Skills"],
+        preferredSkills: prefSkills,
         experienceLevel: experienceLevel.trim(),
         location: location.trim(),
         createdAt: roleToEdit?.createdAt || new Date().toISOString(),
@@ -95,14 +90,12 @@ export function RoleModal({ open, onOpenChange, roleToEdit, onSaveRole }: RoleMo
       // 1. Save to client localStorage immediately (guarantees persistence across page refresh & offline/Vercel)
       saveStoredCustomRole(roleObj);
 
-      // 2. Fire API request asynchronously to attempt server save
-      const url = roleToEdit ? `/api/roles/${roleToEdit.id}` : "/api/roles";
-      const method = roleToEdit ? "PUT" : "POST";
-      fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(roleObj),
-      }).catch(() => {});
+      // 2. Fire central API client request asynchronously to sync server storage
+      if (roleToEdit) {
+        api.updateRole(roleToEdit.id, roleObj).catch(() => {});
+      } else {
+        api.createRole(roleObj).catch(() => {});
+      }
 
       toast.success(roleToEdit ? "Role updated successfully!" : "New role created successfully!");
       onSaveRole(roleObj);

@@ -30,7 +30,7 @@ import { RoleModal } from "@/components/RoleModal";
 import { InterviewModal } from "@/components/InterviewModal";
 import { AppDialog } from "@/components/AppDialog";
 import { exportCSV, exportExcel, exportPDFPrint } from "@/lib/exportUtils";
-import { apiFetch, ApiError } from "@/lib/api";
+import { api, apiFetch, ApiError } from "@/lib/api";
 import { OfflinePage } from "@/components/OfflinePage";
 import { ServerErrorPage } from "@/components/ServerErrorPage";
 import { getStoredCustomRoles, deleteStoredCustomRole } from "@/lib/storage";
@@ -138,9 +138,8 @@ export default function Home() {
 
   // Load roles on mount
   const loadRoles = async () => {
-    const localCustom = getStoredCustomRoles();
     try {
-      const data = await apiFetch("/api/roles", { timeoutMs: 5000 });
+      const data = await api.getRoles();
       if (data.roles && Array.isArray(data.roles) && data.roles.length > 0) {
         const merged = combineWithLocalCustomRoles(data.roles);
         setRoles(merged);
@@ -193,15 +192,8 @@ export default function Home() {
     setAnalysisResult(null); // Clear previous analysis session!
     setIsUploading(true);
 
-    const formData = new FormData();
-    formData.append("resume", uploadedFile);
-
     try {
-      const data = await apiFetch("/api/resume/upload", {
-        method: "POST",
-        body: formData,
-        timeoutMs: 30000, // 30s timeout for large uploads
-      });
+      const data = await api.uploadResume(uploadedFile);
 
       setParsedResume(data.resume);
       toast.success("Resume processed successfully!", {
@@ -242,15 +234,7 @@ export default function Home() {
     }
 
     try {
-      const data = await apiFetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          parsedResume,
-          role: selectedRole,
-        }),
-        timeoutMs: 15000,
-      });
+      const data = await api.analyzeResume(parsedResume, selectedRole);
 
       setAnalysisResult(data.result);
       setStage(stages.length);
@@ -281,7 +265,7 @@ export default function Home() {
 
     // 2. Async API deletion attempt
     try {
-      await apiFetch(`/api/roles/${roleId}`, { method: "DELETE" });
+      await api.deleteRole(roleId);
     } catch (err) {
       // Handled locally via localStorage
     }

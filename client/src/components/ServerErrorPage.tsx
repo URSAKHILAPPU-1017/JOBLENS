@@ -2,8 +2,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ServerOff, RefreshCw, ArrowLeft, Terminal } from "lucide-react";
 import { useLocation } from "wouter";
-import { checkServerHealth } from "@/lib/api";
-
+import { checkServerHealth, isLocalDev } from "@/lib/api";
 import { toast } from "sonner";
 
 interface ServerErrorPageProps {
@@ -14,11 +13,27 @@ interface ServerErrorPageProps {
 
 export function ServerErrorPage({
   onRetry,
-  title = "JOBLENS server unavailable.",
-  description = "We couldn't connect to the local JOBLENS API server.",
+  title,
+  description,
 }: ServerErrorPageProps) {
   const [, setLocation] = useLocation();
   const [isRetrying, setIsRetrying] = useState(false);
+
+  const localMode = isLocalDev();
+
+  const displayTitle =
+    title ||
+    (localMode
+      ? "JOBLENS server unavailable."
+      : "JOBLENS Service Unavailable");
+
+  const displayDescription =
+    description ||
+    (localMode
+      ? "We couldn't connect to the local JOBLENS API server."
+      : "The JOBLENS API service is temporarily unreachable. Please check your network connection or try again shortly.");
+
+  const eyebrowText = localMode ? "BACKEND DISCONNECTED" : "SERVICE TEMPORARILY UNAVAILABLE";
 
   const handleRetry = async () => {
     setIsRetrying(true);
@@ -29,7 +44,11 @@ export function ServerErrorPage({
       if (onRetry) onRetry();
       else window.location.reload();
     } else {
-      toast.error("JOBLENS server is still unreachable. Please verify pnpm dev is running.");
+      toast.error(
+        localMode
+          ? "JOBLENS server is still unreachable. Please verify pnpm dev is running."
+          : "JOBLENS service is still unreachable. Please try again in a moment."
+      );
     }
   };
 
@@ -48,23 +67,25 @@ export function ServerErrorPage({
           <ServerOff size={32} />
         </div>
 
-        <div className="eyebrow text-[#e7684a] mb-2">BACKEND DISCONNECTED</div>
-        <h1 className="font-display text-4xl tracking-[-.05em] text-[#16263b] mb-3">
-          {title}
+        <div className="eyebrow text-[#e7684a] mb-2">{eyebrowText}</div>
+        <h1 className="font-display text-3xl md:text-4xl tracking-[-.05em] text-[#16263b] mb-3">
+          {displayTitle}
         </h1>
 
         <p className="text-sm leading-6 text-[#657180] mb-5">
-          {description}
+          {displayDescription}
         </p>
 
-        {/* HELPFUL COMMAND TIP */}
-        <div className="mb-6 rounded-xl border border-[#ded5c5] bg-[#f6f1e7] p-4 text-left text-xs font-mono text-[#16263b] flex items-start gap-3">
-          <Terminal size={16} className="text-[#e7684a] shrink-0 mt-0.5" />
-          <div>
-            <div className="font-bold font-sans text-[#657180] mb-1">Make sure backend is running:</div>
-            <code>pnpm dev</code>
+        {/* HELPFUL COMMAND TIP: Only display in local development */}
+        {localMode && (
+          <div className="mb-6 rounded-xl border border-[#ded5c5] bg-[#f6f1e7] p-4 text-left text-xs font-mono text-[#16263b] flex items-start gap-3">
+            <Terminal size={16} className="text-[#e7684a] shrink-0 mt-0.5" />
+            <div>
+              <div className="font-bold font-sans text-[#657180] mb-1">Make sure backend is running:</div>
+              <code>pnpm dev</code>
+            </div>
           </div>
-        </div>
+        )}
 
         <div className="flex flex-col gap-3">
           <Button
@@ -73,7 +94,7 @@ export function ServerErrorPage({
             className="h-12 w-full rounded-full bg-[#16263b] text-sm font-bold text-[#fffaf2] shadow-[4px_4px_0_#e7684a] hover:bg-[#263b55] transition flex items-center justify-center gap-2"
           >
             <RefreshCw size={16} className={isRetrying ? "animate-spin" : ""} />
-            {isRetrying ? "Checking server..." : "Retry Connection"}
+            {isRetrying ? "Checking service..." : "Retry Connection"}
           </Button>
 
           <Button
