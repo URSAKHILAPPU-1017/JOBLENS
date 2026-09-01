@@ -1,4 +1,4 @@
-import express, { Request, Response, NextFunction } from "express";
+import express, { Request, Response, NextFunction, ErrorRequestHandler } from "express";
 import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
@@ -117,10 +117,10 @@ export function createApp() {
       timestamp: new Date().toISOString(),
     });
   };
-  apiRouter.get(["/health", "/api/health"], healthHandler);
+  apiRouter.get("/health", healthHandler);
 
   // Resume Upload Endpoint (POST /resume/upload or POST /api/resume/upload)
-  apiRouter.post(["/resume/upload", "/api/resume/upload"], (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post("/resume/upload", (req: Request, res: Response) => {
     upload.single("resume")(req, res, async (err: any) => {
       if (err) {
         console.error("[Upload Middleware Error]", err);
@@ -177,7 +177,7 @@ export function createApp() {
   });
 
   // Resume Analysis Endpoint (POST /analyze or POST /api/analyze)
-  apiRouter.post(["/analyze", "/api/analyze"], (req: Request, res: Response) => {
+  apiRouter.post("/analyze", (req: Request, res: Response) => {
     try {
       const { parsedResume, role } = req.body as { parsedResume: ParsedResume; role: JobRole };
       if (!parsedResume || !parsedResume.extractedText) {
@@ -208,12 +208,12 @@ export function createApp() {
   });
 
   // Roles CRUD Endpoints
-  apiRouter.get(["/roles", "/api/roles"], (_req: Request, res: Response) => {
+  apiRouter.get("/roles", (_req: Request, res: Response) => {
     const roles = loadRoles();
     return res.status(200).json({ success: true, roles });
   });
 
-  apiRouter.post(["/roles", "/api/roles"], (req: Request, res: Response) => {
+  apiRouter.post("/roles", (req: Request, res: Response) => {
     try {
       const { title, company, category, description, requiredSkills, preferredSkills, experienceLevel, location } = req.body;
       if (!title || typeof title !== "string" || !title.trim()) {
@@ -269,7 +269,7 @@ export function createApp() {
     }
   });
 
-  apiRouter.put(["/roles/:id", "/api/roles/:id"], (req: Request, res: Response) => {
+  apiRouter.put("/roles/:id", (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { title, company, category, description, requiredSkills, preferredSkills, experienceLevel, location } = req.body;
@@ -329,7 +329,7 @@ export function createApp() {
     }
   });
 
-  apiRouter.delete(["/roles/:id", "/api/roles/:id"], (req: Request, res: Response) => {
+  apiRouter.delete("/roles/:id", (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const roles = loadRoles();
@@ -358,14 +358,14 @@ export function createApp() {
   });
 
   // Saved Interview Answers
-  apiRouter.get(["/answers/:analysisId", "/api/answers/:analysisId"], (req: Request, res: Response) => {
+  apiRouter.get("/answers/:analysisId", (req: Request, res: Response) => {
     const { analysisId } = req.params;
     const all = loadAnswers();
     const filtered = all.filter((a) => a.analysisId === analysisId);
     return res.status(200).json({ success: true, answers: filtered });
   });
 
-  apiRouter.post(["/answers", "/api/answers"], (req: Request, res: Response) => {
+  apiRouter.post("/answers", (req: Request, res: Response) => {
     try {
       const { analysisId, questionId, answer } = req.body;
       if (!analysisId || !questionId) {
@@ -413,22 +413,23 @@ export function createApp() {
     if (fs.existsSync(staticPath) && fs.existsSync(path.join(staticPath, "index.html"))) {
       app.use(express.static(staticPath));
       app.get("*", (req: Request, res: Response, next: NextFunction) => {
-        if (req.path.startsWith("/api")) return next();
+        if (req.path && req.path.startsWith("/api")) return next();
         res.sendFile(path.join(staticPath, "index.html"));
       });
     }
   }
 
   // Centralized Express Error Handler (guarantees JSON response for all /api errors)
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  const errorHandler: ErrorRequestHandler = (err: any, _req: Request, res: Response, _next: NextFunction) => {
     console.error("[Central Error Handler]", err);
     const status = err.status || err.statusCode || (err instanceof multer.MulterError ? 400 : 500);
-    return res.status(status).json({
+    res.status(status).json({
       success: false,
       error: err.message || "An unexpected server error occurred.",
       code: err.code || "INTERNAL_SERVER_ERROR",
     });
-  });
+  };
+  app.use(errorHandler);
 
   return app;
 }
