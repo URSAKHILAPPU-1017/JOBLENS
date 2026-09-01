@@ -1,5 +1,3 @@
-import { PDFParse } from "pdf-parse";
-import mammoth from "mammoth";
 import { nanoid } from "nanoid";
 import { ParsedResume } from "../shared/types";
 
@@ -120,18 +118,21 @@ export async function parseResumeBuffer(
   let isScannedPdf = false;
 
   if (extension === "pdf" || mimetype === "application/pdf") {
-    let pdfParser: PDFParse | null = null;
+    let pdfParser: any = null;
     try {
-      pdfParser = new PDFParse({ data: buffer });
+      const pdfModule = (await import("pdf-parse")) as any;
+      const PDFParseClass = pdfModule.PDFParse || pdfModule;
+      pdfParser = new PDFParseClass({ data: buffer });
       const textResult = await pdfParser.getText();
       extractedText = cleanText(textResult.text || "");
       if (extractedText.length < 40) {
         isScannedPdf = true;
       }
-    } catch (err) {
+    } catch (err: any) {
+      console.error("[PDF Parse Error]", err);
       throw new Error(`Failed to parse PDF file "${filename}". The file might be encrypted or corrupted.`);
     } finally {
-      if (pdfParser) {
+      if (pdfParser && typeof pdfParser.destroy === "function") {
         await pdfParser.destroy().catch(() => {});
       }
     }
@@ -140,9 +141,11 @@ export async function parseResumeBuffer(
     mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
   ) {
     try {
+      const mammoth = (await import("mammoth")) as any;
       const docxResult = await mammoth.extractRawText({ buffer });
       extractedText = cleanText(docxResult.value || "");
-    } catch (err) {
+    } catch (err: any) {
+      console.error("[DOCX Parse Error]", err);
       throw new Error(`Failed to parse DOCX file "${filename}". The document might be corrupted.`);
     }
   } else if (extension === "txt" || mimetype === "text/plain" || mimetype.startsWith("text/")) {

@@ -4,7 +4,6 @@ import fs from "fs";
 import { fileURLToPath } from "url";
 import multer from "multer";
 import { nanoid } from "nanoid";
-import { parseResumeBuffer } from "./parser";
 import { analyzeResume } from "../shared/analysisEngine";
 import { DEFAULT_JOB_ROLES } from "../shared/defaultRoles";
 import { JobRole, ParsedResume, SavedAnswer } from "../shared/types";
@@ -17,6 +16,8 @@ const ROLES_FILE = path.join(DATA_DIR, "roles.json");
 const ANSWERS_FILE = path.join(DATA_DIR, "answers.json");
 
 function ensureDataDir() {
+  // Ignore filesystem writes in Vercel / serverless environment
+  if (process.env.VERCEL) return;
   try {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -50,6 +51,7 @@ function loadRoles(): JobRole[] {
 
 function saveRoles(roles: JobRole[]) {
   ensureDataDir();
+  if (process.env.VERCEL) return;
   const tmpFile = `${ROLES_FILE}.tmp-${Date.now()}`;
   try {
     fs.writeFileSync(tmpFile, JSON.stringify(roles, null, 2), "utf-8");
@@ -80,6 +82,7 @@ function loadAnswers(): SavedAnswer[] {
 
 function saveAnswers(answers: SavedAnswer[]) {
   ensureDataDir();
+  if (process.env.VERCEL) return;
   const tmpFile = `${ANSWERS_FILE}.tmp-${Date.now()}`;
   try {
     fs.writeFileSync(tmpFile, JSON.stringify(answers, null, 2), "utf-8");
@@ -114,11 +117,10 @@ export function createApp() {
       timestamp: new Date().toISOString(),
     });
   };
-  apiRouter.get("/health", healthHandler);
-  apiRouter.get("/", healthHandler);
+  apiRouter.get(["/health", "/api/health"], healthHandler);
 
   // Resume Upload Endpoint (POST /resume/upload or POST /api/resume/upload)
-  apiRouter.post("/resume/upload", (req: Request, res: Response, next: NextFunction) => {
+  apiRouter.post(["/resume/upload", "/api/resume/upload"], (req: Request, res: Response, next: NextFunction) => {
     upload.single("resume")(req, res, async (err: any) => {
       if (err) {
         console.error("[Upload Middleware Error]", err);
@@ -151,6 +153,8 @@ export function createApp() {
           });
         }
 
+        // Dynamically import parser to prevent top-level module load failures on Vercel initialization
+        const { parseResumeBuffer } = await import("./parser");
         const parsed = await parseResumeBuffer(
           req.file.buffer,
           req.file.originalname,
@@ -173,7 +177,7 @@ export function createApp() {
   });
 
   // Resume Analysis Endpoint (POST /analyze or POST /api/analyze)
-  apiRouter.post("/analyze", (req: Request, res: Response) => {
+  apiRouter.post(["/analyze", "/api/analyze"], (req: Request, res: Response) => {
     try {
       const { parsedResume, role } = req.body as { parsedResume: ParsedResume; role: JobRole };
       if (!parsedResume || !parsedResume.extractedText) {
@@ -204,12 +208,12 @@ export function createApp() {
   });
 
   // Roles CRUD Endpoints
-  apiRouter.get("/roles", (_req: Request, res: Response) => {
+  apiRouter.get(["/roles", "/api/roles"], (_req: Request, res: Response) => {
     const roles = loadRoles();
     return res.status(200).json({ success: true, roles });
   });
 
-  apiRouter.post("/roles", (req: Request, res: Response) => {
+  apiRouter.post(["/roles", "/api/roles"], (req: Request, res: Response) => {
     try {
       const { title, company, category, description, requiredSkills, preferredSkills, experienceLevel, location } = req.body;
       if (!title || typeof title !== "string" || !title.trim()) {
@@ -265,7 +269,7 @@ export function createApp() {
     }
   });
 
-  apiRouter.put("/roles/:id", (req: Request, res: Response) => {
+  apiRouter.put(["/roles/:id", "/api/roles/:id"], (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const { title, company, category, description, requiredSkills, preferredSkills, experienceLevel, location } = req.body;
@@ -325,7 +329,7 @@ export function createApp() {
     }
   });
 
-  apiRouter.delete("/roles/:id", (req: Request, res: Response) => {
+  apiRouter.delete(["/roles/:id", "/api/roles/:id"], (req: Request, res: Response) => {
     try {
       const { id } = req.params;
       const roles = loadRoles();
@@ -354,14 +358,14 @@ export function createApp() {
   });
 
   // Saved Interview Answers
-  apiRouter.get("/answers/:analysisId", (req: Request, res: Response) => {
+  apiRouter.get(["/answers/:analysisId", "/api/answers/:analysisId"], (req: Request, res: Response) => {
     const { analysisId } = req.params;
     const all = loadAnswers();
     const filtered = all.filter((a) => a.analysisId === analysisId);
     return res.status(200).json({ success: true, answers: filtered });
   });
 
-  apiRouter.post("/answers", (req: Request, res: Response) => {
+  apiRouter.post(["/answers", "/api/answers"], (req: Request, res: Response) => {
     try {
       const { analysisId, questionId, answer } = req.body;
       if (!analysisId || !questionId) {
@@ -404,7 +408,7 @@ export function createApp() {
   app.use("/", apiRouter);
 
   // Production Static Routing for Standalone Express Server
-  if (process.env.NODE_ENV === "production") {
+  if (process.env.NODE_ENV === "production" && !process.env.VERCEL) {
     const staticPath = path.resolve(__dirname, "..");
     if (fs.existsSync(staticPath) && fs.existsSync(path.join(staticPath, "index.html"))) {
       app.use(express.static(staticPath));
