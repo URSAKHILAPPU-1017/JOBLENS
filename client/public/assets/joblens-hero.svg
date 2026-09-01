@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" width="800" height="600">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#16263b"/>
+      <stop offset="100%" stop-color="#263b55"/>
+    </linearGradient>
+    <linearGradient id="lensGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#e7684a"/>
+      <stop offset="100%" stop-color="#e3b65b"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="600" rx="32" fill="url(#bgGrad)"/>
+  <!-- Decorative Grid & Circles -->
+  <circle cx="400" cy="300" r="220" fill="none" stroke="rgba(255,250,242,0.08)" stroke-width="2"/>
+  <circle cx="400" cy="300" r="150" fill="none" stroke="rgba(231,104,74,0.3)" stroke-width="3" stroke-dasharray="10 8"/>
+  <circle cx="400" cy="300" r="80" fill="url(#lensGrad)" opacity="0.9"/>
+  <!-- Target Lens Lines -->
+  <line x1="150" y1="300" x2="650" y2="300" stroke="rgba(255,250,242,0.15)" stroke-width="2"/>
+  <line x1="400" y1="50" x2="400" y2="550" stroke="rgba(255,250,242,0.15)" stroke-width="2"/>
+  <!-- Editorial Card Graphic Overlay -->
+  <rect x="240" y="160" width="320" height="280" rx="16" fill="rgba(255,253,248,0.92)" stroke="#ded5c5" stroke-width="2"/>
+  <rect x="270" y="200" width="160" height="14" rx="7" fill="#16263b"/>
+  <rect x="270" y="230" width="260" height="8" rx="4" fill="#657180" opacity="0.6"/>
+  <rect x="270" y="250" width="220" height="8" rx="4" fill="#657180" opacity="0.4"/>
+  <rect x="270" y="290" width="120" height="24" rx="12" fill="#dcebe2"/>
+  <rect x="400" y="290" width="120" height="24" rx="12" fill="#fbefcf"/>
+  <rect x="270" y="340" width="260" height="60" rx="12" fill="#16263b"/>
+  <text x="290" y="375" font-family="system-ui, sans-serif" font-size="16" font-weight="bold" fill="#fffaf2">MATCH SCORE: 92%</text>
+</svg>
