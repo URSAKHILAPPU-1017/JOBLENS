@@ -1,5 +1,7 @@
 import { nanoid } from "nanoid";
 import { ParsedResume } from "../shared/types.js";
+import "pdfjs-dist/build/pdf.worker.mjs";
+
 
 function cleanText(text: string): string {
   return text
