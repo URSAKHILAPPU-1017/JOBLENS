@@ -123,8 +123,9 @@ export async function parseResumeBuffer(
     try {
       console.log(`[PDF_UPLOAD] filename="${filename}" mimetype="${mimetype}" size=${buffer.length}`);
       const { extractText } = await import("unpdf");
-      const uint8Data = new Uint8Array(buffer);
-      const textResult = await extractText(uint8Data);
+      const pdfData = new Uint8Array(buffer.length);
+      buffer.copy(pdfData, 0, 0, buffer.length);
+      const textResult = await extractText(pdfData);
       const pageTexts = Array.isArray(textResult.text)
         ? textResult.text.join("\n")
         : String(textResult.text || "");
