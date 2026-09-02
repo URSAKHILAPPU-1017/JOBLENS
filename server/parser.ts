@@ -1,5 +1,6 @@
 import { nanoid } from "nanoid";
 import { extractText } from "unpdf";
+import PDFParser from "pdf2json";
 import { ParsedResume } from "../shared/types.js";
 
 if (typeof (globalThis as any).DOMMatrix === "undefined") {
@@ -11,6 +12,25 @@ if (typeof (globalThis as any).ImageData === "undefined") {
 if (typeof (globalThis as any).Path2D === "undefined") {
   (globalThis as any).Path2D = class Path2D {};
 }
+
+function parsePdfWithPdf2Json(buffer: Buffer): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const parser = new PDFParser(null, true);
+    parser.on("pdfParser_dataError", (errData: any) =>
+      reject(new Error(errData?.parserError || errData?.message || "PDF parsing error"))
+    );
+    parser.on("pdfParser_dataReady", () => {
+      try {
+        const rawText = parser.getRawTextContent();
+        resolve(rawText || "");
+      } catch (err: any) {
+        reject(err);
+      }
+    });
+    parser.parseBuffer(buffer);
+  });
+}
+
 
 
 
@@ -132,39 +152,48 @@ export async function parseResumeBuffer(
   let isScannedPdf = false;
 
   if (extension === "pdf" || mimetype === "application/pdf") {
+    console.log(`[PDF_UPLOAD] filename="${filename}" mimetype="${mimetype}" size=${buffer.length}`);
     try {
-      console.log(`[PDF_UPLOAD] filename="${filename}" mimetype="${mimetype}" size=${buffer.length}`);
-      const pdfData = new Uint8Array(buffer.length);
-      buffer.copy(pdfData, 0, 0, buffer.length);
-      const textResult = await extractText(pdfData);
-      const pageTexts = Array.isArray(textResult.text)
-        ? textResult.text.join("\n")
-        : String(textResult.text || "");
-      extractedText = cleanText(pageTexts);
+      const rawText = await parsePdfWithPdf2Json(buffer);
+      extractedText = cleanText(rawText.replace(/----------------Page \(\d+\) Break----------------/g, "\n"));
       if (extractedText.length < 40) {
         isScannedPdf = true;
       }
-    } catch (unpdfErr: any) {
-      console.warn("[unpdf warning, trying pdf-parse fallback]", unpdfErr?.message || unpdfErr);
-      let pdfParser: any = null;
+    } catch (pdf2JsonErr: any) {
+      console.warn("[pdf2json warning, trying unpdf fallback]", pdf2JsonErr?.message || pdf2JsonErr);
       try {
-        const pdfModule = (await import("pdf-parse")) as any;
-        const PDFParseClass = pdfModule.PDFParse || pdfModule.default?.PDFParse || pdfModule;
-        pdfParser = new PDFParseClass({ data: buffer });
-        const textResult = await pdfParser.getText();
-        extractedText = cleanText(textResult.text || "");
+        const pdfData = new Uint8Array(buffer.length);
+        buffer.copy(pdfData, 0, 0, buffer.length);
+        const textResult = await extractText(pdfData);
+        const pageTexts = Array.isArray(textResult.text)
+          ? textResult.text.join("\n")
+          : String(textResult.text || "");
+        extractedText = cleanText(pageTexts);
         if (extractedText.length < 40) {
           isScannedPdf = true;
         }
-      } catch (err: any) {
-        console.error(
-          `[PDF_PARSE_ERROR] filename="${filename}" mimetype="${mimetype}" size=${buffer.length} name="${err?.name || "Error"}" message="${err?.message || String(err)}"`,
-          err?.stack || ""
-        );
-        throw new Error(`Failed to parse PDF file "${filename}": ${err?.message || String(err)}`);
-      } finally {
-        if (pdfParser && typeof pdfParser.destroy === "function") {
-          await pdfParser.destroy().catch(() => {});
+      } catch (unpdfErr: any) {
+        console.warn("[unpdf warning, trying pdf-parse fallback]", unpdfErr?.message || unpdfErr);
+        let pdfParser: any = null;
+        try {
+          const pdfModule = (await import("pdf-parse")) as any;
+          const PDFParseClass = pdfModule.PDFParse || pdfModule.default?.PDFParse || pdfModule;
+          pdfParser = new PDFParseClass({ data: buffer });
+          const textResult = await pdfParser.getText();
+          extractedText = cleanText(textResult.text || "");
+          if (extractedText.length < 40) {
+            isScannedPdf = true;
+          }
+        } catch (err: any) {
+          console.error(
+            `[PDF_PARSE_ERROR] filename="${filename}" mimetype="${mimetype}" size=${buffer.length} name="${err?.name || "Error"}" message="${err?.message || String(err)}"`,
+            err?.stack || ""
+          );
+          throw new Error(`Failed to parse PDF file "${filename}": ${err?.message || String(err)}`);
+        } finally {
+          if (pdfParser && typeof pdfParser.destroy === "function") {
+            await pdfParser.destroy().catch(() => {});
+          }
         }
       }
     }
