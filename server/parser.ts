@@ -150,7 +150,7 @@ export async function parseResumeBuffer(
           `[PDF_PARSE_ERROR] filename="${filename}" mimetype="${mimetype}" size=${buffer.length} name="${err?.name || "Error"}" message="${err?.message || String(err)}"`,
           err?.stack || ""
         );
-        throw new Error(`Failed to parse PDF file "${filename}". The file might be encrypted or corrupted.`);
+        throw new Error(`Failed to parse PDF file "${filename}": ${err?.message || String(err)}`);
       } finally {
         if (pdfParser && typeof pdfParser.destroy === "function") {
           await pdfParser.destroy().catch(() => {});
