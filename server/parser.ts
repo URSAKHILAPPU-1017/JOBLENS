@@ -122,33 +122,18 @@ export async function parseResumeBuffer(
   if (extension === "pdf" || mimetype === "application/pdf") {
     try {
       console.log(`[PDF_UPLOAD] filename="${filename}" mimetype="${mimetype}" size=${buffer.length}`);
-      const pdfjsLib = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as any;
-      const data = new Uint8Array(buffer);
-      const loadingTask = pdfjsLib.getDocument({
-        data,
-        useSystemFonts: true,
-        disableFontFace: true,
-        isEvalSupported: false,
-      });
-      const doc = await loadingTask.promise;
-      let fullText = "";
-      for (let i = 1; i <= doc.numPages; i++) {
-        const page = await doc.getPage(i);
-        const content = await page.getTextContent();
-        const pageText = content.items
-          .map((item: any) => (typeof item.str === "string" ? item.str : ""))
-          .filter(Boolean)
-          .join(" ");
-        fullText += pageText + "\n";
-        page.cleanup();
-      }
-      await doc.destroy().catch(() => {});
-      extractedText = cleanText(fullText);
+      const { extractText } = await import("unpdf");
+      const uint8Data = new Uint8Array(buffer);
+      const textResult = await extractText(uint8Data);
+      const pageTexts = Array.isArray(textResult.text)
+        ? textResult.text.join("\n")
+        : String(textResult.text || "");
+      extractedText = cleanText(pageTexts);
       if (extractedText.length < 40) {
         isScannedPdf = true;
       }
-    } catch (pdfJsErr: any) {
-      console.warn("[PDFJS Direct Parse Warning, attempting fallback]", pdfJsErr?.message || pdfJsErr);
+    } catch (unpdfErr: any) {
+      console.warn("[unpdf warning, trying pdf-parse fallback]", unpdfErr?.message || unpdfErr);
       let pdfParser: any = null;
       try {
         const pdfModule = (await import("pdf-parse")) as any;
