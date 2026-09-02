@@ -7,6 +7,8 @@ import { nanoid } from "nanoid";
 import { analyzeResume } from "../shared/analysisEngine.js";
 import { DEFAULT_JOB_ROLES } from "../shared/defaultRoles.js";
 import { JobRole, ParsedResume, SavedAnswer } from "../shared/types.js";
+import { parseResumeBuffer } from "./parser.js";
+
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -155,8 +157,6 @@ export function createApp() {
           });
         }
 
-        // Dynamically import parser to prevent top-level module load failures on Vercel initialization
-        const { parseResumeBuffer } = await import("./parser.js");
         const parsed = await parseResumeBuffer(
           req.file.buffer,
           req.file.originalname,
