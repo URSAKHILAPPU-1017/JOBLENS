@@ -120,8 +120,16 @@ export async function parseResumeBuffer(
   if (extension === "pdf" || mimetype === "application/pdf") {
     let pdfParser: any = null;
     try {
+      console.log(`[PDF_UPLOAD] filename="${filename}" mimetype="${mimetype}" size=${buffer.length}`);
       const pdfModule = (await import("pdf-parse")) as any;
-      const PDFParseClass = pdfModule.PDFParse || pdfModule;
+      const PDFParseClass = pdfModule.PDFParse || pdfModule.default?.PDFParse || pdfModule;
+      if (typeof PDFParseClass.setWorker === "function") {
+        try {
+          PDFParseClass.setWorker("pdfjs-dist/legacy/build/pdf.worker.mjs");
+        } catch (wErr: any) {
+          console.warn("[PDF Worker Warning]", wErr?.message || wErr);
+        }
+      }
       pdfParser = new PDFParseClass({ data: buffer });
       const textResult = await pdfParser.getText();
       extractedText = cleanText(textResult.text || "");
@@ -129,7 +137,10 @@ export async function parseResumeBuffer(
         isScannedPdf = true;
       }
     } catch (err: any) {
-      console.error("[PDF Parse Error]", err);
+      console.error(
+        `[PDF_PARSE_ERROR] filename="${filename}" mimetype="${mimetype}" size=${buffer.length} name="${err?.name || "Error"}" message="${err?.message || String(err)}"`,
+        err?.stack || ""
+      );
       throw new Error(`Failed to parse PDF file "${filename}". The file might be encrypted or corrupted.`);
     } finally {
       if (pdfParser && typeof pdfParser.destroy === "function") {
