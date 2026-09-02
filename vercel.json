@@ -4,7 +4,7 @@
   "outputDirectory": "dist",
   "functions": {
     "api/**/*": {
-      "includeFiles": "node_modules/pdfjs-dist/**"
+      "includeFiles": "node_modules/{pdfjs-dist,unpdf,pdf-parse}/**"
     }
   },
   "rewrites": [
