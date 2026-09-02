@@ -1,6 +1,7 @@
 import { nanoid } from "nanoid";
+import { extractText } from "unpdf";
 import { ParsedResume } from "../shared/types.js";
-import "pdfjs-dist/build/pdf.worker.mjs";
+
 
 
 function cleanText(text: string): string {
@@ -122,7 +123,6 @@ export async function parseResumeBuffer(
   if (extension === "pdf" || mimetype === "application/pdf") {
     try {
       console.log(`[PDF_UPLOAD] filename="${filename}" mimetype="${mimetype}" size=${buffer.length}`);
-      const { extractText } = await import("unpdf");
       const pdfData = new Uint8Array(buffer.length);
       buffer.copy(pdfData, 0, 0, buffer.length);
       const textResult = await extractText(pdfData);
