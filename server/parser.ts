@@ -21,8 +21,14 @@ function parsePdfWithPdf2Json(buffer: Buffer): Promise<string> {
     );
     parser.on("pdfParser_dataReady", () => {
       try {
-        const rawText = parser.getRawTextContent();
-        resolve(rawText || "");
+        const rawText = parser.getRawTextContent() || "";
+        let decoded = rawText;
+        try {
+          decoded = decodeURIComponent(rawText);
+        } catch {
+          decoded = rawText.replace(/%20/g, " ").replace(/%0A/g, "\n").replace(/%0D/g, "\r");
+        }
+        resolve(decoded);
       } catch (err: any) {
         reject(err);
       }
