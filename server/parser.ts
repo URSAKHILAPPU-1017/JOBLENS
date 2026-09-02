@@ -120,33 +120,55 @@ export async function parseResumeBuffer(
   let isScannedPdf = false;
 
   if (extension === "pdf" || mimetype === "application/pdf") {
-    let pdfParser: any = null;
     try {
       console.log(`[PDF_UPLOAD] filename="${filename}" mimetype="${mimetype}" size=${buffer.length}`);
-      const pdfModule = (await import("pdf-parse")) as any;
-      const PDFParseClass = pdfModule.PDFParse || pdfModule.default?.PDFParse || pdfModule;
-      if (typeof PDFParseClass.setWorker === "function") {
-        try {
-          PDFParseClass.setWorker("pdfjs-dist/build/pdf.worker.mjs");
-        } catch (wErr: any) {
-          console.warn("[PDF Worker Warning]", wErr?.message || wErr);
-        }
+      const pdfjsLib = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as any;
+      const data = new Uint8Array(buffer);
+      const loadingTask = pdfjsLib.getDocument({
+        data,
+        useSystemFonts: true,
+        disableFontFace: true,
+        isEvalSupported: false,
+      });
+      const doc = await loadingTask.promise;
+      let fullText = "";
+      for (let i = 1; i <= doc.numPages; i++) {
+        const page = await doc.getPage(i);
+        const content = await page.getTextContent();
+        const pageText = content.items
+          .map((item: any) => (typeof item.str === "string" ? item.str : ""))
+          .filter(Boolean)
+          .join(" ");
+        fullText += pageText + "\n";
+        page.cleanup();
       }
-      pdfParser = new PDFParseClass({ data: buffer });
-      const textResult = await pdfParser.getText();
-      extractedText = cleanText(textResult.text || "");
+      await doc.destroy().catch(() => {});
+      extractedText = cleanText(fullText);
       if (extractedText.length < 40) {
         isScannedPdf = true;
       }
-    } catch (err: any) {
-      console.error(
-        `[PDF_PARSE_ERROR] filename="${filename}" mimetype="${mimetype}" size=${buffer.length} name="${err?.name || "Error"}" message="${err?.message || String(err)}"`,
-        err?.stack || ""
-      );
-      throw new Error(`Failed to parse PDF file "${filename}". The file might be encrypted or corrupted.`);
-    } finally {
-      if (pdfParser && typeof pdfParser.destroy === "function") {
-        await pdfParser.destroy().catch(() => {});
+    } catch (pdfJsErr: any) {
+      console.warn("[PDFJS Direct Parse Warning, attempting fallback]", pdfJsErr?.message || pdfJsErr);
+      let pdfParser: any = null;
+      try {
+        const pdfModule = (await import("pdf-parse")) as any;
+        const PDFParseClass = pdfModule.PDFParse || pdfModule.default?.PDFParse || pdfModule;
+        pdfParser = new PDFParseClass({ data: buffer });
+        const textResult = await pdfParser.getText();
+        extractedText = cleanText(textResult.text || "");
+        if (extractedText.length < 40) {
+          isScannedPdf = true;
+        }
+      } catch (err: any) {
+        console.error(
+          `[PDF_PARSE_ERROR] filename="${filename}" mimetype="${mimetype}" size=${buffer.length} name="${err?.name || "Error"}" message="${err?.message || String(err)}"`,
+          err?.stack || ""
+        );
+        throw new Error(`Failed to parse PDF file "${filename}". The file might be encrypted or corrupted.`);
+      } finally {
+        if (pdfParser && typeof pdfParser.destroy === "function") {
+          await pdfParser.destroy().catch(() => {});
+        }
       }
     }
   } else if (
