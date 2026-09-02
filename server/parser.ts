@@ -125,7 +125,7 @@ export async function parseResumeBuffer(
       const PDFParseClass = pdfModule.PDFParse || pdfModule.default?.PDFParse || pdfModule;
       if (typeof PDFParseClass.setWorker === "function") {
         try {
-          PDFParseClass.setWorker("pdfjs-dist/legacy/build/pdf.worker.mjs");
+          PDFParseClass.setWorker("pdfjs-dist/build/pdf.worker.mjs");
         } catch (wErr: any) {
           console.warn("[PDF Worker Warning]", wErr?.message || wErr);
         }
