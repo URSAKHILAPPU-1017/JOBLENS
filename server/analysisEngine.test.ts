@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { analyzeResume } from "../shared/analysisEngine";
-import { ParsedResume, JobRole } from "../shared/types";
-import { DEFAULT_JOB_ROLES } from "../shared/defaultRoles";
+import { analyzeResume } from "../shared/analysisEngine.js";
+import { ParsedResume, JobRole } from "../shared/types.js";
+import { DEFAULT_JOB_ROLES } from "../shared/defaultRoles.js";
 
 const softwareRole = DEFAULT_JOB_ROLES.find((r) => r.id === "role-software-dev")!;
 const dataScienceRole = DEFAULT_JOB_ROLES.find((r) => r.id === "role-data-scientist")!;

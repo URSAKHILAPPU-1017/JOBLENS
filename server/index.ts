@@ -1,5 +1,5 @@
 import { createServer } from "http";
-import { app } from "./app";
+import { app } from "./app.js";
 
 const port = Number(process.env.PORT) || (process.env.NODE_ENV === "production" ? 3000 : 3001);
 const server = createServer(app);

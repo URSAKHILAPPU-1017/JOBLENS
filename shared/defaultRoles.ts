@@ -1,4 +1,4 @@
-import { JobRole } from "./types";
+import { JobRole } from "./types.js";
 
 export const DEFAULT_JOB_ROLES: JobRole[] = [
   {

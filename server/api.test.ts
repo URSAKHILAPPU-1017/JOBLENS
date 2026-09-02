@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { app } from "./app";
-import { parseResumeBuffer } from "./parser";
-import { analyzeResume } from "../shared/analysisEngine";
-import { DEFAULT_JOB_ROLES } from "../shared/defaultRoles";
+import { app } from "./app.js";
+import { parseResumeBuffer } from "./parser.js";
+import { analyzeResume } from "../shared/analysisEngine.js";
+import { DEFAULT_JOB_ROLES } from "../shared/defaultRoles.js";
 
 describe("JOBLENS API Server Endpoints & Resume Parsing", () => {
   it("TXT resume parsing extracts text cleanly", async () => {

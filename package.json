@@ -7,7 +7,7 @@
     "dev": "concurrently \"tsx server/index.ts\" \"vite --host --port 3000\"",
     "dev:server": "tsx server/index.ts",
     "dev:client": "vite --host --port 3000",
-    "build": "vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist/server",
+    "build": "vite build && esbuild server/app.ts --platform=node --packages=external --bundle --format=esm --outfile=server/app.js && esbuild api/index.ts --platform=node --packages=external --bundle --format=esm --outfile=api/index.js && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist/server",
     "start": "NODE_ENV=production node dist/server/index.js",
     "test": "vitest run",
     "preview": "vite preview --host",

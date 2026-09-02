@@ -7,7 +7,7 @@ import {
   ResumeImprovement,
   SkillMatchDetail,
   SubCategoryMetric,
-} from "./types";
+} from "./types.js";
 
 const SKILL_ALIASES: Record<string, string[]> = {
   javascript: ["js", "javascript", "ecmascript"],

@@ -1,5 +1,5 @@
 import { nanoid } from "nanoid";
-import { ParsedResume } from "../shared/types";
+import { ParsedResume } from "../shared/types.js";
 
 function cleanText(text: string): string {
   return text
